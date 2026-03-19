@@ -27,7 +27,6 @@ export class AgentBuilderPlatformPlugin
       PluginStartDependencies
     >
 {
-  // @ts-expect-error unused for now
   private logger: Logger;
   // @ts-expect-error unused for now
   private config: AgentBuilderConfig;

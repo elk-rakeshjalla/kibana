@@ -8,8 +8,10 @@
 import type { AgentBuilderPluginSetup } from '@kbn/agent-builder-plugin/server';
 import { dataExplorationSkill } from './data_exploration_skill';
 import { visualizationCreationSkill } from './visualization_creation_skill';
+import { researchSkill } from './research_skill';
 
 export const registerSkills = (agentBuilder: AgentBuilderPluginSetup) => {
   agentBuilder.skills.register(dataExplorationSkill);
   agentBuilder.skills.register(visualizationCreationSkill);
+  agentBuilder.skills.register(researchSkill);
 };

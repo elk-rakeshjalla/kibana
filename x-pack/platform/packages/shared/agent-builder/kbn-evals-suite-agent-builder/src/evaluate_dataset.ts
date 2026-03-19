@@ -195,6 +195,11 @@ function configureExperiment({
       log,
       skillName: 'data-exploration',
     }),
+    createSkillInvocationEvaluator({
+      traceEsClient,
+      log,
+      skillName: 'research',
+    }),
   ]);
 
   return { task, evaluators: selectedEvaluators };
