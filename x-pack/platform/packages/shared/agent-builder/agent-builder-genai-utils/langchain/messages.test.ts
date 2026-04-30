@@ -107,4 +107,13 @@ describe('createToolResultMessage', () => {
       `<tool_result>${JSON.stringify({ results: [{ ok: true }] })}</tool_result>`
     );
   });
+
+  it.each([
+    ['undefined', undefined],
+    ['a function', () => 'noop'],
+    ['a symbol', Symbol('s')],
+  ])('produces an empty envelope when content serializes to %s', (_label, content) => {
+    const message = createToolResultMessage({ content, toolCallId: 'call-3' });
+    expect(message.content).toBe('<tool_result></tool_result>');
+  });
 });
