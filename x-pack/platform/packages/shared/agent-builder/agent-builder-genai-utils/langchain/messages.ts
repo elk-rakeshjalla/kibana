@@ -120,6 +120,15 @@ export const createAIMessage = (
   return new AIMessage({ content: clean ? cleanPrompt(content) : content });
 };
 
+// Wraps tool-result content in a <tool_result> envelope so the model can
+// syntactically distinguish trusted instructions from untrusted retrieved
+// content. Escapes any literal </tool_result> in the inner content so a
+// retrieved document cannot prematurely close the envelope.
+export const wrapToolResultContent = (content: string): string => {
+  const escaped = content.replace(/<\/tool_result>/gi, '<\\/tool_result>');
+  return `<tool_result>${escaped}</tool_result>`;
+};
+
 export const createToolResultMessage = ({
   content,
   toolCallId,
@@ -127,8 +136,9 @@ export const createToolResultMessage = ({
   content: unknown;
   toolCallId: string;
 }): ToolMessage => {
+  const serialized = typeof content === 'string' ? content : JSON.stringify(content);
   return new ToolMessage({
-    content: typeof content === 'string' ? content : JSON.stringify(content),
+    content: wrapToolResultContent(serialized),
     tool_call_id: toolCallId,
   });
 };
