@@ -122,10 +122,12 @@ export const createAIMessage = (
 
 // Wraps tool-result content in a <tool_result> envelope so the model can
 // syntactically distinguish trusted instructions from untrusted retrieved
-// content. Escapes any literal </tool_result> in the inner content so a
-// retrieved document cannot prematurely close the envelope.
+// content. Escapes any closing-tag variant inside the inner content so a
+// retrieved document cannot prematurely close the envelope. Matches lenient
+// variants (case-insensitive, whitespace/newlines before '>') because LLMs
+// treat them as equivalent to the canonical close tag.
 export const wrapToolResultContent = (content: string): string => {
-  const escaped = content.replace(/<\/tool_result>/gi, '<\\/tool_result>');
+  const escaped = content.replace(/<(\/tool_result\s*>)/gi, '<\\$1');
   return `<tool_result>${escaped}</tool_result>`;
 };
 
