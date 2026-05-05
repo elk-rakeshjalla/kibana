@@ -134,15 +134,17 @@ export const wrapToolResultContent = (content: string): string => {
 export const createToolResultMessage = ({
   content,
   toolCallId,
+  wrapToolResult = true,
 }: {
   content: unknown;
   toolCallId: string;
+  wrapToolResult?: boolean;
 }): ToolMessage => {
   // JSON.stringify returns the primitive `undefined` for undefined/functions/symbols,
   // which would crash wrapToolResultContent — coerce to '' so the envelope is always a string.
   const serialized = typeof content === 'string' ? content : JSON.stringify(content) ?? '';
   return new ToolMessage({
-    content: wrapToolResultContent(serialized),
+    content: wrapToolResult ? wrapToolResultContent(serialized) : serialized,
     tool_call_id: toolCallId,
   });
 };

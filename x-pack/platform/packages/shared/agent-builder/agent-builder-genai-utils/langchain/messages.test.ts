@@ -110,6 +110,16 @@ describe('createToolResultMessage', () => {
     expect(message.tool_call_id).toBe('call-1');
   });
 
+  it('omits wrapping when wrapToolResult=false', () => {
+    const message = createToolResultMessage({
+      content: 'plain',
+      toolCallId: 'call-1',
+      wrapToolResult: false,
+    });
+    expect(message.content).toBe('plain');
+    expect(message.tool_call_id).toBe('call-1');
+  });
+
   it('serializes non-string content with JSON.stringify before wrapping', () => {
     const message = createToolResultMessage({
       content: { results: [{ ok: true }] },
