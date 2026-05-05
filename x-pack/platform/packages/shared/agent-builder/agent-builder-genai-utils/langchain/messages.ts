@@ -121,11 +121,7 @@ export const createAIMessage = (
 };
 
 // Wraps tool-result content in a <tool_result> envelope so the model can
-// syntactically distinguish trusted instructions from untrusted retrieved
-// content. Escapes any closing-tag variant inside the inner content so a
-// retrieved document cannot prematurely close the envelope. Matches lenient
-// variants (case-insensitive, whitespace/newlines before '>') because LLMs
-// treat them as equivalent to the canonical close tag.
+// syntactically distinguish trusted instructions from untrusted retrieved content.
 export const wrapToolResultContent = (content: string): string => {
   const escaped = content.replace(/<(\/tool_result\s*>)/gi, '<\\$1');
   return `<tool_result>${escaped}</tool_result>`;
@@ -140,8 +136,6 @@ export const createToolResultMessage = ({
   toolCallId: string;
   wrapToolResult?: boolean;
 }): ToolMessage => {
-  // JSON.stringify returns the primitive `undefined` for undefined/functions/symbols,
-  // which would crash wrapToolResultContent — coerce to '' so the envelope is always a string.
   const serialized = typeof content === 'string' ? content : JSON.stringify(content) ?? '';
   return new ToolMessage({
     content: wrapToolResult ? wrapToolResultContent(serialized) : serialized,
