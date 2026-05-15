@@ -22,7 +22,14 @@ import {
   validateEsqlQuery,
   buildTimeRangeParams,
 } from '../utils/esql';
-import { createRequestDocumentationPrompt, createGenerateEsqlPrompt } from './prompts';
+import {
+  createRequestDocumentationPrompt,
+  createRequestDocumentationPromptCatalog,
+  createGenerateEsqlPrompt,
+  createGenerateEsqlPromptTight,
+  createGenerateEsqlPromptFromSkill,
+} from './prompts';
+import type { EsqlPrompts } from '@kbn/inference-plugin/server/tasks/nl_to_esql/doc_base/load_data';
 import type { ResolvedResourceWithSampling } from '../utils/resources';
 import type {
   Action,
@@ -71,12 +78,28 @@ export const createNlToEsqlGraph = ({
   esClient,
   docBase,
   esqlCallbacks,
+  skillPack,
+  tightPrompts,
 }: {
   model: ScopedModel;
   esClient: ElasticsearchClient;
   docBase: EsqlDocumentBase;
   esqlCallbacks?: ValidateEsqlQueryCallbacks;
+  /**
+   * If provided, the graph runs in "skill pack" mode (cell B):
+   *   - `request_documentation` node is skipped
+   *   - `generate_esql` uses the skill pack as authoritative grounding
+   *     instead of `<syntax-overview>` + `<esql-examples>` + `getEsqlInstructions(...)`
+   */
+  skillPack?: string;
+  /**
+   * If provided, replaces the inference-plugin's syntax/examples with local tightened copies
+   * and uses condensed prompt scaffolding. Activated when experimental features are enabled.
+   */
+  tightPrompts?: EsqlPrompts;
 }) => {
+  const useSkillPack = typeof skillPack === 'string' && skillPack.length > 0;
+
   // resolve the search target / generate sampling data
   const resolveTarget = async (state: StateType) => {
     const resolvedResource = await resolveResourceForEsqlWithSamplingStats({
@@ -107,11 +130,16 @@ export const createNlToEsqlGraph = ({
     );
 
     const { commands = [], functions = [] } = await requestDocModel.invoke(
-      createRequestDocumentationPrompt({
-        nlQuery: state.nlQuery,
-        prompts: docBase.getPrompts(),
-        resource: state.resource,
-      })
+      tightPrompts
+        ? createRequestDocumentationPromptCatalog({
+            nlQuery: state.nlQuery,
+            resource: state.resource,
+          })
+        : createRequestDocumentationPrompt({
+            nlQuery: state.nlQuery,
+            prompts: docBase.getPrompts(),
+            resource: state.resource,
+          })
     );
 
     const requestedKeywords = [...commands, ...functions];
@@ -132,18 +160,38 @@ export const createNlToEsqlGraph = ({
   const generateEsql = async (state: StateType) => {
     const generateModel = model.chatModel;
 
-    const response = await generateModel.invoke(
-      createGenerateEsqlPrompt({
-        nlQuery: state.nlQuery,
-        prompts: docBase.getPrompts(),
-        resource: state.resource,
-        previousActions: state.actions,
-        additionalInstructions: state.additionalInstructions,
-        additionalContext: state.additionalContext,
-        rowLimit: state.rowLimit,
-        disableNamedParams: state.disableNamedParams,
-      })
-    );
+    const promptMessages = useSkillPack
+      ? createGenerateEsqlPromptFromSkill({
+          nlQuery: state.nlQuery,
+          skillPack: skillPack as string,
+          resource: state.resource,
+          previousActions: state.actions,
+          additionalInstructions: state.additionalInstructions,
+          additionalContext: state.additionalContext,
+        })
+      : tightPrompts
+      ? createGenerateEsqlPromptTight({
+          nlQuery: state.nlQuery,
+          prompts: tightPrompts,
+          resource: state.resource,
+          previousActions: state.actions,
+          additionalInstructions: state.additionalInstructions,
+          additionalContext: state.additionalContext,
+          rowLimit: state.rowLimit,
+          disableNamedParams: state.disableNamedParams,
+        })
+      : createGenerateEsqlPrompt({
+          nlQuery: state.nlQuery,
+          prompts: docBase.getPrompts(),
+          resource: state.resource,
+          previousActions: state.actions,
+          additionalInstructions: state.additionalInstructions,
+          additionalContext: state.additionalContext,
+          rowLimit: state.rowLimit,
+          disableNamedParams: state.disableNamedParams,
+        });
+
+    const response = await generateModel.invoke(promptMessages);
 
     const responseText = extractTextContent(response);
     const queries = extractEsqlQueries(responseText);
@@ -347,19 +395,26 @@ export const createNlToEsqlGraph = ({
     return {};
   };
 
-  const graph = new StateGraph(StateAnnotation)
-    // nodes
+  const builder = new StateGraph(StateAnnotation)
     .addNode('resolve_target', resolveTarget)
-    .addNode('request_documentation', requestDocumentation)
     .addNode('generate_esql', generateEsql)
     .addNode('autocorrect_query', autocorrectQuery)
     .addNode('execute_query', executeQuery)
     .addNode('validate_query', validateQueryStep)
-    .addNode('finalize', finalize)
-    // edges
-    .addEdge('__start__', 'resolve_target')
-    .addEdge('resolve_target', 'request_documentation')
-    .addEdge('request_documentation', 'generate_esql')
+    .addNode('finalize', finalize);
+
+  if (useSkillPack) {
+    // Skill-pack mode (cell B): skip request_documentation entirely.
+    builder.addEdge('__start__', 'resolve_target').addEdge('resolve_target', 'generate_esql');
+  } else {
+    builder
+      .addNode('request_documentation', requestDocumentation)
+      .addEdge('__start__', 'resolve_target')
+      .addEdge('resolve_target', 'request_documentation')
+      .addEdge('request_documentation', 'generate_esql');
+  }
+
+  const graph = builder
     .addConditionalEdges('generate_esql', branchAfterGenerate, {
       generate_esql: 'generate_esql',
       autocorrect_query: 'autocorrect_query',

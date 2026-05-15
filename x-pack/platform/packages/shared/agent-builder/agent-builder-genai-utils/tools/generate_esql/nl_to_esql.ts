@@ -16,6 +16,8 @@ import { buildServerESQLCallbacks } from '@kbn/esql-server-utils';
 import type { EsqlResponse } from '../utils/esql';
 import { createNlToEsqlGraph } from './graph';
 import { indexExplorer } from '../index_explorer';
+import { isSkillPackModeEnabled, loadSkillPack } from './skill_pack_loader';
+import { loadTightPrompts } from './prompts_static_loader';
 
 export interface GenerateEsqlResponse {
   /**
@@ -109,11 +111,29 @@ export const generateEsql = async ({
   const docBase = await EsqlDocumentBase.load();
   const esqlCallbacks = buildServerESQLCallbacks({ client: esClient });
 
+  const useSkillPack = isSkillPackModeEnabled();
+  const skillPack = useSkillPack ? await loadSkillPack() : undefined;
+  if (useSkillPack) {
+    logger?.info(
+      '[generateEsql] AGENT_BUILDER_ESQL_USE_SKILL_PACK is enabled — using skill_pack.md as authoritative grounding (request_documentation skipped)'
+    );
+  }
+
+  const tightPrompts = await loadTightPrompts();
+  logger?.info(
+    `[generateEsql] tight prompts active — syntax: ${tightPrompts.syntax.length} chars, examples: ${tightPrompts.examples.length} chars (vs baseline ~16856 / ~9186)`
+  );
+  logger?.debug(
+    `[generateEsql] tight syntax preview:\n${tightPrompts.syntax.slice(0, 300)}\n...\n[generateEsql] tight examples preview:\n${tightPrompts.examples.slice(0, 300)}`
+  );
+
   const graph = createNlToEsqlGraph({
     model,
     esClient,
     docBase,
     esqlCallbacks,
+    skillPack,
+    tightPrompts,
   });
 
   return withActiveInferenceSpan(
