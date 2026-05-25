@@ -148,6 +148,20 @@ export type ChatCompleteOptions = {
    * The timeout for the chat completion request.
    */
   timeout?: number;
+  /**
+   * Maximum number of tokens to generate. When set, passed as `max_tokens` to the
+   * underlying provider API. Useful for capping output length on structured or short-answer
+   * calls (e.g. pickers, validators) to reduce latency.
+   */
+  maxTokens?: number;
+  /**
+   * Arbitrary extra fields merged into the provider request body as-is.
+   * Use for provider-specific parameters not yet modelled in this type, e.g.
+   * `{ reasoning: { effort: "none" } }` to disable reasoning tokens on OpenRouter.
+   * Explicit typed fields (model, temperature, max_tokens, …) take precedence over
+   * anything in extraBody with the same key.
+   */
+  extraBody?: Record<string, unknown>;
 } & ToolOptions;
 
 export interface ChatCompleteRetryConfiguration {

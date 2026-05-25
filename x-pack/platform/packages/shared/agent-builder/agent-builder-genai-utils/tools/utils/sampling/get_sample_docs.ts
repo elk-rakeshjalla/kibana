@@ -20,6 +20,11 @@ export interface SampleDoc {
 /**
  * Return sample documents from the specified index, alias or datastream
  */
+const indexSeed = (index: string | string[]): number => {
+  const key = Array.isArray(index) ? [...index].sort().join(',') : index;
+  return Math.abs(key.split('').reduce((acc, ch) => ((acc * 31 + ch.charCodeAt(0)) | 0), 0));
+};
+
 export const getSampleDocs = async ({
   index,
   size = 100,
@@ -43,7 +48,7 @@ export const getSampleDocs = async ({
             function_score: {
               functions: [
                 {
-                  random_score: {},
+                  random_score: { seed: indexSeed(index), field: '_seq_no' },
                 },
               ],
             },

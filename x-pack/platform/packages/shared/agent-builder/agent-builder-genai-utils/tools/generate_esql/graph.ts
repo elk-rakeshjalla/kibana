@@ -13,7 +13,20 @@ import type { ElasticsearchClient } from '@kbn/core/server';
 import type { EsqlDocumentBase } from '@kbn/inference-plugin/server/tasks/nl_to_esql/doc_base';
 import { correctCommonEsqlMistakes } from '@kbn/inference-plugin/common';
 import type { EsqlPrompts } from '@kbn/inference-plugin/server/tasks/nl_to_esql/doc_base/load_data';
+import { withActiveInferenceSpan, ElasticGenAIAttributes } from '@kbn/inference-tracing';
+import { appendFileSync } from 'node:fs';
 import { extractTextContent } from '../../langchain/messages';
+
+const esqlTraceFile = process.env.ESQL_TRACE_FILE;
+const traceToFile = esqlTraceFile
+  ? (entry: Record<string, unknown>) => {
+      try {
+        appendFileSync(esqlTraceFile, JSON.stringify(entry) + '\n');
+      } catch {
+        // ignore — don't break generation on write errors
+      }
+    }
+  : undefined;
 import type { EsqlResponse } from '../utils/esql';
 import { resolveResourceForEsqlWithSamplingStats } from '../utils/resources';
 import type { ValidateEsqlQueryCallbacks } from '../utils/esql';
@@ -25,10 +38,10 @@ import {
 } from '../utils/esql';
 import {
   createRequestDocumentationPrompt,
-  createRequestDocumentationPromptCatalog,
   createGenerateEsqlPrompt,
-  createGenerateEsqlPromptTight,
   createGenerateEsqlPromptFromSkill,
+  createPickerPromptCacheTrack,
+  createGeneratorPromptCacheTrack,
 } from './prompts';
 import type { ResolvedResourceWithSampling } from '../utils/resources';
 import type {
@@ -116,100 +129,147 @@ export const createNlToEsqlGraph = ({
 
   // request doc step - retrieve the list of relevant commands and functions that may be useful to generate the query
   const requestDocumentation = async (state: StateType) => {
-    const requestDocModel = model.chatModel.withStructuredOutput(
-      z
-        .object({
-          commands: z
-            .array(z.string())
-            .optional()
-            .describe('ES|QL source and processing commands to get documentation for.'),
-          functions: z
-            .array(z.string())
-            .optional()
-            .describe('ES|QL functions to get documentation for.'),
-        })
-        .describe('Tool to use to request ES|QL documentation'),
-      { name: 'request_documentation' }
+    return withActiveInferenceSpan(
+      'EsqlPicker',
+      { attributes: { [ElasticGenAIAttributes.InferenceSpanKind]: 'CHAIN' } },
+      async () => {
+        const requestDocModel = model.chatModel.withStructuredOutput(
+          z
+            .object({
+              commands: z
+                .array(z.string())
+                .nullish()
+                .describe('ES|QL source and processing commands to get documentation for.'),
+              functions: z
+                .array(z.string())
+                .nullish()
+                .describe('ES|QL functions to get documentation for.'),
+            })
+            .describe('Tool to use to request ES|QL documentation'),
+          { name: 'request_documentation' }
+        );
+
+        const pickerMessages = tightPrompts
+          ? createPickerPromptCacheTrack({
+              nlQuery: state.nlQuery,
+              resource: state.resource,
+              prompts: tightPrompts,
+            })
+          : createRequestDocumentationPrompt({
+              nlQuery: state.nlQuery,
+              documentation,
+              resource: state.resource,
+            });
+
+        traceToFile?.({
+          span: 'EsqlPicker',
+          kind: 'input',
+          ts: new Date().toISOString(),
+          nlQuery: state.nlQuery,
+          messages: pickerMessages,
+        });
+
+        const pickerResult = await requestDocModel.invoke(pickerMessages);
+        const commands = pickerResult.commands ?? [];
+        const functions = pickerResult.functions ?? [];
+
+        traceToFile?.({
+          span: 'EsqlPicker',
+          kind: 'output',
+          ts: new Date().toISOString(),
+          nlQuery: state.nlQuery,
+          result: { commands, functions },
+        });
+
+        const requestedKeywords = [...commands, ...functions];
+        const fetchedDoc = docBase.getDocumentation(requestedKeywords);
+
+        const action: RequestDocumentationAction = {
+          type: 'request_documentation',
+          requestedKeywords,
+          fetchedDoc,
+        };
+
+        return {
+          actions: [action],
+        };
+      }
     );
-
-    const { commands = [], functions = [] } = await requestDocModel.invoke(
-      tightPrompts
-        ? createRequestDocumentationPromptCatalog({
-            nlQuery: state.nlQuery,
-            resource: state.resource,
-          })
-        : createRequestDocumentationPrompt({
-            nlQuery: state.nlQuery,
-            documentation,
-            resource: state.resource,
-          })
-    );
-
-    const requestedKeywords = [...commands, ...functions];
-    const fetchedDoc = docBase.getDocumentation(requestedKeywords);
-
-    const action: RequestDocumentationAction = {
-      type: 'request_documentation',
-      requestedKeywords,
-      fetchedDoc,
-    };
-
-    return {
-      actions: [action],
-    };
   };
 
   // generate esql step - generate the esql query based on the doc and the user's input
   const generateEsql = async (state: StateType) => {
-    const generateModel = model.chatModel;
+    return withActiveInferenceSpan(
+      'EsqlGenerator',
+      { attributes: { [ElasticGenAIAttributes.InferenceSpanKind]: 'CHAIN' } },
+      async () => {
+        const generateModel = model.chatModel;
 
-    const promptMessages = useSkillPack
-      ? createGenerateEsqlPromptFromSkill({
+        const promptMessages = useSkillPack
+          ? createGenerateEsqlPromptFromSkill({
+              nlQuery: state.nlQuery,
+              skillPack: skillPack as string,
+              resource: state.resource,
+              previousActions: state.actions,
+              additionalInstructions: state.additionalInstructions,
+              additionalContext: state.additionalContext,
+            })
+          : tightPrompts
+          ? createGeneratorPromptCacheTrack({
+              nlQuery: state.nlQuery,
+              prompts: tightPrompts,
+              resource: state.resource,
+              previousActions: state.actions,
+              additionalInstructions: state.additionalInstructions,
+              additionalContext: state.additionalContext,
+              rowLimit: state.rowLimit,
+              disableNamedParams: state.disableNamedParams,
+            })
+          : createGenerateEsqlPrompt({
+              nlQuery: state.nlQuery,
+              documentation,
+              resource: state.resource,
+              previousActions: state.actions,
+              additionalInstructions: state.additionalInstructions,
+              additionalContext: state.additionalContext,
+              rowLimit: state.rowLimit,
+              disableNamedParams: state.disableNamedParams,
+            });
+
+        traceToFile?.({
+          span: 'EsqlGenerator',
+          kind: 'input',
+          ts: new Date().toISOString(),
           nlQuery: state.nlQuery,
-          skillPack: skillPack as string,
-          resource: state.resource,
-          previousActions: state.actions,
-          additionalInstructions: state.additionalInstructions,
-          additionalContext: state.additionalContext,
-        })
-      : tightPrompts
-      ? createGenerateEsqlPromptTight({
-          nlQuery: state.nlQuery,
-          prompts: tightPrompts,
-          resource: state.resource,
-          previousActions: state.actions,
-          additionalInstructions: state.additionalInstructions,
-          additionalContext: state.additionalContext,
-          rowLimit: state.rowLimit,
-          disableNamedParams: state.disableNamedParams,
-        })
-      : createGenerateEsqlPrompt({
-          nlQuery: state.nlQuery,
-          documentation,
-          resource: state.resource,
-          previousActions: state.actions,
-          additionalInstructions: state.additionalInstructions,
-          additionalContext: state.additionalContext,
-          rowLimit: state.rowLimit,
-          disableNamedParams: state.disableNamedParams,
+          messages: promptMessages,
         });
 
-    const response = await generateModel.invoke(promptMessages);
+        const response = await generateModel.invoke(promptMessages);
 
-    const responseText = extractTextContent(response);
-    const queries = extractEsqlQueries(responseText);
+        const responseText = extractTextContent(response);
 
-    const action: GenerateQueryAction = {
-      type: 'generate_query',
-      success: queries.length > 0,
-      query: queries[0],
-      response: responseText,
-    };
+        traceToFile?.({
+          span: 'EsqlGenerator',
+          kind: 'output',
+          ts: new Date().toISOString(),
+          nlQuery: state.nlQuery,
+          response: responseText,
+        });
+        const queries = extractEsqlQueries(responseText);
 
-    return {
-      actions: [action],
-      currentTry: state.currentTry + 1,
-    };
+        const action: GenerateQueryAction = {
+          type: 'generate_query',
+          success: queries.length > 0,
+          query: queries[0],
+          response: responseText,
+        };
+
+        return {
+          actions: [action],
+          currentTry: state.currentTry + 1,
+        };
+      }
+    );
   };
 
   const branchAfterGenerate = async (state: StateType) => {

@@ -7,12 +7,13 @@
 
 import { withActiveInferenceSpan, ElasticGenAIAttributes } from '@kbn/inference-tracing';
 import type { TimeRange } from '@kbn/agent-builder-common';
-import type { ScopedModel } from '@kbn/agent-builder-server';
+import type { ScopedModel, ModelProvider } from '@kbn/agent-builder-server';
 import type { Logger } from '@kbn/logging';
 import type { ElasticsearchClient } from '@kbn/core-elasticsearch-server';
 import { EsqlDocumentBase } from '@kbn/inference-plugin/server/tasks/nl_to_esql/doc_base';
 import type { ToolEventEmitter } from '@kbn/agent-builder-server';
 import { buildServerESQLCallbacks } from '@kbn/esql-server-utils';
+import { InferenceChatModel } from '@kbn/inference-langchain';
 import type { EsqlResponse } from '../utils/esql';
 import { createNlToEsqlGraph } from './graph';
 import { indexExplorer } from '../index_explorer';
@@ -41,6 +42,11 @@ export interface GenerateEsqlResponse {
 
 export interface GenerateEsqlDeps {
   model: ScopedModel;
+  /**
+   * If provided, used to select the fast model (effortLevel: low) for ESQL generation.
+   * Falls back to `model` when not provided or when selectModel fails.
+   */
+  modelProvider?: ModelProvider;
   esClient: ElasticsearchClient;
   logger: Logger;
   events?: ToolEventEmitter;
@@ -104,6 +110,7 @@ export const generateEsql = async ({
   timeRange: inputTimeRange,
   disableNamedParams,
   model,
+  modelProvider,
   esClient,
   logger,
 }: GenerateEsqlParams): Promise<GenerateEsqlResponse> => {
@@ -116,15 +123,105 @@ export const generateEsql = async ({
   logger?.info(
     `[generateEsql] tight prompts active — syntax: ${tightPrompts.syntax.length} chars, examples: ${tightPrompts.examples.length} chars (vs baseline ~16856 / ~9186)`
   );
-  logger?.debug(
-    `[generateEsql] tight syntax preview:\n${tightPrompts.syntax.slice(
-      0,
-      300
-    )}\n...\n[generateEsql] tight examples preview:\n${tightPrompts.examples.slice(0, 300)}`
+
+  // Cap output tokens and disable reasoning tokens on every ESQL model call to reduce latency.
+  // extraBody is forwarded as-is to the provider (e.g. OpenRouter passes reasoning.effort to
+  // the underlying model). Explicit typed fields take precedence over anything in extraBody.
+  const esqlModelOptions = {
+    maxTokens: 4096,
+    extraBody: { reasoning: { effort: 'none' } },
+  };
+
+  const withEsqlOptions = (base: ScopedModel): ScopedModel => ({
+    ...base,
+    chatModel: new InferenceChatModel({
+      connector: base.connector,
+      chatComplete: base.inferenceClient.chatComplete,
+      ...esqlModelOptions,
+    }),
+  });
+
+  // Internal inference endpoint for Haiku 4.5 — preferred fast model for ESQL generation.
+  const ESQL_FAST_CONNECTOR_ID = '.anthropic-claude-4.5-haiku-chat_completion';
+
+  let resolvedModel = withEsqlOptions(model);
+  const esqlConnectorId = process.env.ESQL_MODEL_CONNECTOR_ID;
+  logger?.info(
+    `[generateEsql] modelProvider available: ${modelProvider != null}, esqlConnectorId: ${
+      esqlConnectorId ?? 'none'
+    }`
   );
 
+  if (esqlConnectorId && modelProvider) {
+    // Env var takes precedence for eval pinning. Use modelProvider.getModelById so internal
+    // inference endpoint IDs (prefixed with '.') work in addition to regular connector IDs.
+    try {
+      resolvedModel = withEsqlOptions(
+        await modelProvider.getModelById({ connectorId: esqlConnectorId })
+      );
+      logger?.info(`[generateEsql] env override — using connector: ${esqlConnectorId}`);
+    } catch (err) {
+      logger?.warn(
+        `[generateEsql] env override failed for "${esqlConnectorId}": ${
+          (err as Error)?.message
+        } — falling back`
+      );
+    }
+  } else if (modelProvider) {
+    // Try Haiku 4.5 internal inference endpoint first (hardwired fast model for ESQL).
+    // Falls back to selectModel(low) which picks whatever fast model is configured,
+    // then ultimately falls back to the default model.
+    try {
+      resolvedModel = withEsqlOptions(
+        await modelProvider.getModelById({ connectorId: ESQL_FAST_CONNECTOR_ID })
+      );
+      logger?.info(`[generateEsql] using fast model: ${ESQL_FAST_CONNECTOR_ID}`);
+    } catch (fastErr) {
+      logger?.warn(
+        `[generateEsql] getModelById(${ESQL_FAST_CONNECTOR_ID}) failed: ${
+          (fastErr as Error)?.message
+        } — trying selectModel(low)`
+      );
+      try {
+        const selected = await modelProvider.selectModel({ effortLevel: 'low' });
+        resolvedModel = withEsqlOptions(selected);
+        logger?.info(
+          `[generateEsql] selectModel(low) resolved connector: ${selected.connector.connectorId}`
+        );
+      } catch (err) {
+        logger?.warn(
+          `[generateEsql] fast model unavailable: ${
+            (err as Error)?.message
+          } — using default connector: ${model.connector.connectorId}`
+        );
+      }
+    }
+  } else {
+    // modelProvider not available at this call site — resolve fast model directly via inferenceClient.
+    try {
+      const connector = await model.inferenceClient.getConnectorById(ESQL_FAST_CONNECTOR_ID);
+      const boundClient = model.inferenceClient.bindTo({ connectorId: ESQL_FAST_CONNECTOR_ID });
+      resolvedModel = {
+        connector,
+        chatModel: new InferenceChatModel({
+          connector,
+          chatComplete: boundClient.chatComplete,
+          ...esqlModelOptions,
+        }),
+        inferenceClient: boundClient,
+      };
+      logger?.info(`[generateEsql] using fast model: ${ESQL_FAST_CONNECTOR_ID}`);
+    } catch (err) {
+      logger?.warn(
+        `[generateEsql] fast model unavailable (${
+          (err as Error)?.message
+        }) — using default connector: ${model.connector.connectorId}`
+      );
+    }
+  }
+
   const graph = createNlToEsqlGraph({
-    model,
+    model: resolvedModel,
     esClient,
     docBase,
     documentation,

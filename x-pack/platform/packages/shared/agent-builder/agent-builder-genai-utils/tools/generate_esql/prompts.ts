@@ -259,6 +259,84 @@ ${additionalContext ? `${additionalContext}\n\n` : ''}${formatResourceWithSample
   ];
 };
 
+// ─── Cache-track prompts ──────────────────────────────────────────────────────
+//
+// Picker and generator share an identical [system, user[0]] prefix so the
+// model provider can cache those tokens across both calls and across retries.
+//
+//   CACHED   → system  : syntax + examples  (static, never varies)
+//   CACHED   → user[0] : resource           (stable per index)
+//   NOT CACHED → user[1] : query-specific task (differs per call and query)
+//
+// Do NOT put nlQuery, additionalInstructions, rowLimit, or fetched-doc
+// content into system or user[0] — that would break the shared prefix.
+
+const buildCacheTrackSystemPrompt = (prompts: EsqlPrompts): string =>
+  `You are an ES|QL query assistant helping to write valid ES|QL queries.
+
+${prompts.syntax}
+
+${prompts.examples}`;
+
+export const createPickerPromptCacheTrack = ({
+  nlQuery,
+  resource,
+  prompts,
+}: {
+  nlQuery: string;
+  resource: ResolvedResourceWithSampling;
+  prompts: EsqlPrompts;
+}): BaseMessageLike[] => [
+  ['system', buildCacheTrackSystemPrompt(prompts)],
+  ['user', formatResourceWithSampledValues({ resource })],
+  [
+    'user',
+    `Identify the ES|QL commands and functions you will need to answer the query below.
+Use the request_documentation tool to list them — they will be fetched and provided in the next step.
+
+Query: ${nlQuery}`,
+  ],
+];
+
+export const createGeneratorPromptCacheTrack = ({
+  nlQuery,
+  resource,
+  prompts,
+  previousActions,
+  additionalInstructions,
+  additionalContext,
+  rowLimit,
+  disableNamedParams,
+}: {
+  nlQuery: string;
+  resource: ResolvedResourceWithSampling;
+  prompts: EsqlPrompts;
+  previousActions: Action[];
+  additionalInstructions?: string;
+  additionalContext?: string;
+  rowLimit?: number;
+  disableNamedParams?: boolean;
+}): BaseMessageLike[] => [
+  ['system', buildCacheTrackSystemPrompt(prompts)],
+  ['user', formatResourceWithSampledValues({ resource })],
+  [
+    'user',
+    `Generate a single valid ES|QL query for the following request:
+
+${nlQuery}
+${additionalContext ? `\n${additionalContext}\n` : ''}
+${getTightEsqlInstructions({ defaultLimit: rowLimit, disableNamedParams })}
+${
+  additionalInstructions
+    ? `<user-instructions>\n${additionalInstructions}\n</user-instructions>\n\n*User instructions take precedence over the above.*`
+    : ''
+}`,
+  ],
+  ...previousActions.flatMap((a) => formatAction(a)),
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const createGenerateEsqlPromptFromSkill = ({
   nlQuery,
   resource,

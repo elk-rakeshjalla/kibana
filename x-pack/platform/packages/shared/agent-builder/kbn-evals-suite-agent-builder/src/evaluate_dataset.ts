@@ -242,6 +242,165 @@ function configureExperiment({
         }
       },
     },
+    {
+      name: 'ESQL Cached Input Tokens',
+      kind: 'CODE' as const,
+      evaluate: async ({ output }) => {
+        const traceId = (output as Record<string, unknown>)?.traceId as string | undefined;
+        if (!traceId) {
+          return { score: null, label: 'unavailable', explanation: 'No traceId available' };
+        }
+
+        try {
+          const graphSpanResponse = (await traceEsClient.esql.query({
+            query: `FROM traces-*
+| WHERE trace.id == "${traceId}" AND name == "GenerateEsqlGraph"
+| EVAL start_ms = TO_LONG(@timestamp)
+| EVAL end_ms = start_ms + duration / 1000000
+| KEEP start_ms, end_ms
+| LIMIT 1`,
+          })) as unknown as { values: Array<[number, number]> };
+
+          if (!graphSpanResponse.values?.length) {
+            return {
+              score: null,
+              label: 'unavailable',
+              explanation: 'GenerateEsqlGraph span not found in trace',
+            };
+          }
+
+          const [startMs, endMs] = graphSpanResponse.values[0];
+
+          const tokensResponse = (await traceEsClient.esql.query({
+            query: `FROM traces-*
+| WHERE trace.id == "${traceId}"
+  AND TO_LONG(@timestamp) >= ${startMs}
+  AND TO_LONG(@timestamp) <= ${endMs}
+  AND attributes.gen_ai.usage.cached_input_tokens IS NOT NULL
+| STATS esql_cached_input_tokens = SUM(attributes.gen_ai.usage.cached_input_tokens)`,
+          })) as unknown as { values: Array<[number | null]> };
+
+          const score = tokensResponse.values?.[0]?.[0] ?? null;
+          return { score };
+        } catch (error) {
+          log.warning(
+            `ESQL Cached Input Tokens failed for trace ${traceId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+          return { score: null, label: 'error' };
+        }
+      },
+    },
+    {
+      name: 'ESQL Latency',
+      kind: 'CODE' as const,
+      evaluate: async ({ output }) => {
+        const traceId = (output as Record<string, unknown>)?.traceId as string | undefined;
+        if (!traceId) {
+          return { score: null, label: 'unavailable', explanation: 'No traceId available' };
+        }
+
+        try {
+          // duration is in nanoseconds — convert to seconds to match the Converse latency evaluator
+          const response = (await traceEsClient.esql.query({
+            query: `FROM traces-*
+| WHERE trace.id == "${traceId}" AND name == "GenerateEsqlGraph"
+| EVAL latency_seconds = TO_DOUBLE(duration) / 1000000000
+| KEEP latency_seconds
+| LIMIT 1`,
+          })) as unknown as { values: Array<[number | null]> };
+
+          if (!response.values?.length) {
+            return {
+              score: null,
+              label: 'unavailable',
+              explanation: 'GenerateEsqlGraph span not found in trace',
+            };
+          }
+
+          const score = response.values[0][0] ?? null;
+          return { score };
+        } catch (error) {
+          log.warning(
+            `ESQL Latency failed for trace ${traceId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+          return { score: null, label: 'error' };
+        }
+      },
+    },
+    {
+      name: 'ESQL Picker Latency',
+      kind: 'CODE' as const,
+      evaluate: async ({ output }) => {
+        const traceId = (output as Record<string, unknown>)?.traceId as string | undefined;
+        if (!traceId) {
+          return { score: null, label: 'unavailable', explanation: 'No traceId available' };
+        }
+        try {
+          const response = (await traceEsClient.esql.query({
+            query: `FROM traces-*
+| WHERE trace.id == "${traceId}" AND name == "EsqlPicker"
+| EVAL latency_seconds = TO_DOUBLE(duration) / 1000000000
+| KEEP latency_seconds
+| LIMIT 1`,
+          })) as unknown as { values: Array<[number | null]> };
+
+          if (!response.values?.length) {
+            return {
+              score: null,
+              label: 'unavailable',
+              explanation: 'EsqlPicker span not found in trace',
+            };
+          }
+          return { score: response.values[0][0] ?? null };
+        } catch (error) {
+          log.warning(
+            `ESQL Picker Latency failed for trace ${traceId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+          return { score: null, label: 'error' };
+        }
+      },
+    },
+    {
+      name: 'ESQL Generator Latency',
+      kind: 'CODE' as const,
+      evaluate: async ({ output }) => {
+        const traceId = (output as Record<string, unknown>)?.traceId as string | undefined;
+        if (!traceId) {
+          return { score: null, label: 'unavailable', explanation: 'No traceId available' };
+        }
+        try {
+          const response = (await traceEsClient.esql.query({
+            query: `FROM traces-*
+| WHERE trace.id == "${traceId}" AND name == "EsqlGenerator"
+| EVAL latency_seconds = TO_DOUBLE(duration) / 1000000000
+| KEEP latency_seconds
+| LIMIT 1`,
+          })) as unknown as { values: Array<[number | null]> };
+
+          if (!response.values?.length) {
+            return {
+              score: null,
+              label: 'unavailable',
+              explanation: 'EsqlGenerator span not found in trace',
+            };
+          }
+          return { score: response.values[0][0] ?? null };
+        } catch (error) {
+          log.warning(
+            `ESQL Generator Latency failed for trace ${traceId}: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          );
+          return { score: null, label: 'error' };
+        }
+      },
+    },
     createSkillInvocationEvaluator({
       traceEsClient,
       log,

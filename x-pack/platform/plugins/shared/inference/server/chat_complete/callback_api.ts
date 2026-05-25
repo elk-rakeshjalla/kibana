@@ -213,6 +213,8 @@ function createChatCompletePipeline({
         toolChoice,
         tools,
         timeout,
+        maxTokens,
+        extraBody,
       } = callback(callbackContext);
 
       const messages = sanitizeMessages(givenMessages);
@@ -269,6 +271,8 @@ function createChatCompletePipeline({
                 metadata,
                 timeout,
                 stream,
+                maxTokens,
+                extraBody,
               }).pipe(chunksIntoMessage({ toolOptions: { toolChoice, tools }, logger }));
             }
           ).pipe(deanonymizeMessage({ ...preparedAnonymization, replacementsId }));

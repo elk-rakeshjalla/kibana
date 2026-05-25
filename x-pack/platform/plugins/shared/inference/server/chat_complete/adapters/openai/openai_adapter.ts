@@ -40,6 +40,8 @@ export const openAIAdapter: InferenceConnectorAdapter = {
     metadata,
     timeout,
     stream = false,
+    maxTokens,
+    extraBody,
   }) => {
     const connector = executor.getConnector();
 
@@ -58,20 +60,24 @@ export const openAIAdapter: InferenceConnectorAdapter = {
         tools,
       });
       request = {
+        ...(extraBody ?? {}),
         stream,
         ...getTemperatureIfValid(temperature, { connector, modelName }),
         model: modelName,
         messages: messagesToOpenAI({ system: wrapped.system, messages: wrapped.messages }),
+        ...(maxTokens !== undefined ? { max_tokens: maxTokens } : {}),
       };
     } else {
       const openAiTools = toolsToOpenAI(tools);
       const hasTools = Array.isArray(openAiTools) && openAiTools.length > 0;
 
       request = {
+        ...(extraBody ?? {}),
         stream,
         ...getTemperatureIfValid(temperature, { connector, modelName }),
         model: modelName,
         messages: messagesToOpenAI({ system, messages }),
+        ...(maxTokens !== undefined ? { max_tokens: maxTokens } : {}),
         // Some OpenAI-compatible gateways (notably for Anthropic models) reject tool calling
         // params when the tools list is empty. Only forward tools/tool_choice when tools exist.
         ...(hasTools

@@ -65,6 +65,8 @@ export interface InferenceChatModelParams extends BaseChatModelParams {
   signal?: AbortSignal;
   timeout?: number;
   telemetryMetadata?: ConnectorTelemetryMetadata;
+  maxTokens?: number;
+  extraBody?: Record<string, unknown>;
 }
 
 export interface InferenceChatModelCallOptions extends BaseChatModelCallOptions {
@@ -74,6 +76,8 @@ export interface InferenceChatModelCallOptions extends BaseChatModelCallOptions 
   temperature?: number;
   model?: string;
   timeout?: number;
+  maxTokens?: number;
+  extraBody?: Record<string, unknown>;
 }
 
 type InvocationParams = Omit<ChatCompleteOptions, 'messages' | 'system' | 'stream'>;
@@ -105,6 +109,8 @@ export class InferenceChatModel extends BaseChatModel<InferenceChatModelCallOpti
   protected model?: string;
   protected signal?: AbortSignal;
   protected timeout?: number;
+  protected maxTokens?: number;
+  protected extraBody?: Record<string, unknown>;
 
   constructor(args: InferenceChatModelParams) {
     super(args);
@@ -118,6 +124,8 @@ export class InferenceChatModel extends BaseChatModel<InferenceChatModelCallOpti
     this.signal = args.signal;
     this.timeout = args.timeout;
     this.maxRetries = args.maxRetries;
+    this.maxTokens = args.maxTokens;
+    this.extraBody = args.extraBody;
   }
 
   static lc_name() {
@@ -132,6 +140,8 @@ export class InferenceChatModel extends BaseChatModel<InferenceChatModelCallOpti
       'tool_choice',
       'temperature',
       'model',
+      'maxTokens',
+      'extraBody',
     ];
   }
 
@@ -204,6 +214,8 @@ export class InferenceChatModel extends BaseChatModel<InferenceChatModelCallOpti
       maxRetries: this.maxRetries,
       metadata: { connectorTelemetry: this.telemetryMetadata },
       timeout: options.timeout ?? this.timeout,
+      maxTokens: options.maxTokens ?? this.maxTokens,
+      extraBody: options.extraBody ?? this.extraBody,
     };
   }
 

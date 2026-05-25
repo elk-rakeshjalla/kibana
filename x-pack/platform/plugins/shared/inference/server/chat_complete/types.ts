@@ -51,6 +51,8 @@ export type InferenceAdapterChatCompleteOptions = {
   metadata?: ChatCompleteMetadata;
   stream?: boolean;
   timeout?: number;
+  maxTokens?: number;
+  extraBody?: Record<string, unknown>;
 } & ToolOptions;
 
 /**
