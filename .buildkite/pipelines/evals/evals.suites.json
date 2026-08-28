@@ -446,6 +446,20 @@
       "serverConfigSet": "evals_skill_selection"
     },
     {
+      "id": "connector-selection-benchmark",
+      "name": "Connector Selection Benchmark",
+      "slackChannel": "#agent-builder-alerts",
+      "configPath": "x-pack/platform/packages/shared/agent-builder/kbn-evals-suite-agent-builder/connector_selection.playwright.config.ts",
+      "tags": [
+        "platform",
+        "agent-builder",
+        "connector-selection"
+      ],
+      "ciLabels": [
+        "evals:connector-selection-benchmark"
+      ]
+    },
+    {
       "id": "siem-readiness",
       "name": "SIEM Readiness",
       "slackChannel": "#siem-readiness",

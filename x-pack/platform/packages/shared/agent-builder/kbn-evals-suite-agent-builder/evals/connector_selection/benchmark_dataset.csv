@@ -1,0 +1,78 @@
+connector_id,category,query,query_type,expected_connectors,notes
+amazon_s3,storage,List the buckets I have available in S3,direct,Amazon S3 (testing),
+amazon_s3,storage,Show me what cloud storage buckets I have access to,indirect,Amazon S3 (testing),
+amazon_s3,storage,List the objects in my GCS bucket,distractor,Google Cloud Storage (testing),S3 vs GCS — both object storage but query says GCS
+box,storage,Find my recent files stored in Box,direct,Box (testing),
+box,storage,I need to find a file I uploaded to our cloud file storage last week,indirect,Box (testing),
+box,storage,Find documents on our SharePoint site about company policies,distractor,SharePoint Online (testing),file storage vs intranet document store
+brave_search,search,Search the web for the latest Elasticsearch release notes,direct,Brave Search (testing),
+brave_search,search,I need to find current information about the latest Elastic Stack features from the web,indirect,Brave Search (testing),
+brave_search,search,Do a deep research summary on recent trends in AI-powered observability,distractor,Tavily (testing),quick web lookup vs research-grade synthesis
+confluence_cloud,knowledge,Find pages in Confluence about onboarding,direct,Confluence Cloud (testing),
+confluence_cloud,knowledge,Look up our team's internal documentation about the new hire process,indirect,Confluence Cloud (testing),
+confluence_cloud,knowledge,Search my Notion workspace for onboarding docs,distractor,Notion (testing),both wiki/knowledge tools — query says Notion
+figma,design,Show me my recent Figma design files,direct,Figma (testing),
+figma,design,I need to review the latest UI mockups the design team shared,indirect,Figma (testing),
+figma,design,Find documents in my Drive related to our product design,distractor,Google Drive (testing),design files vs generic Drive docs
+firecrawl,search,Scrape the content from this URL: https://www.elastic.co/blog,direct,Firecrawl (testing),
+firecrawl,search,Get me everything from this webpage including all links and images,indirect,Firecrawl (testing),full crawl implies Firecrawl over Jina
+firecrawl,search,Extract just the readable article text from this Wikipedia page,distractor,Jina Reader (testing),clean reader extract vs full scrape
+github,dev,List the open issues in my GitHub repository,direct,GitHub (testing),
+github,dev,What bugs and feature requests are currently open on our code repo?,indirect,GitHub (testing),
+github,dev,What are my open Jira tickets assigned to me?,distractor,Jira Cloud (testing),code issues vs project tracker tickets
+gmail,email,Show me my most recent unread emails,direct,Gmail (testing),
+gmail,email,Do I have any new messages in my inbox I haven't read yet?,indirect,Gmail (testing),
+gmail,email,Check my Outlook inbox for emails from this week,distractor,Outlook (testing),both email — query says Outlook
+google_calendar,calendar,What meetings do I have scheduled for this week?,direct,Google Calendar (testing),
+google_calendar,calendar,Tell me what's on my schedule for the next 5 days,indirect,Google Calendar (testing),
+google_calendar,calendar,What Zoom meetings do I have coming up?,distractor,Zoom (testing),calendar vs Zoom's own meeting list
+google_cloud_storage,storage,List the objects in my GCS bucket,direct,Google Cloud Storage (testing),
+google_cloud_storage,storage,What files are stored in our Google Cloud storage bucket?,indirect,Google Cloud Storage (testing),
+google_cloud_storage,storage,List the buckets I have available in S3,distractor,Amazon S3 (testing),GCS vs S3 — query says S3
+google_drive,storage,Find documents in my Drive that were recently modified,direct,Google Drive (testing),
+google_drive,storage,I'm looking for a file I edited recently in our shared workspace,indirect,Google Drive (testing),
+google_drive,storage,Find my recent files stored in Box,distractor,Box (testing),shared drive vs Box storage
+hubspot,crm,Show me the latest contacts added in HubSpot,direct,HubSpot (testing),
+hubspot,crm,Who are the newest leads we added to our CRM this week?,indirect,HubSpot (testing),
+hubspot,crm,Look up recent opportunities in Salesforce,distractor,Salesforce (testing),both CRM — query says Salesforce
+jina_reader,search,Extract the readable content from this page: https://en.wikipedia.org/wiki/Elasticsearch,direct,Jina Reader (testing),
+jina_reader,search,Clean up and give me just the article text from this website URL,indirect,Jina Reader (testing),reader mode extract implies Jina
+jina_reader,search,Scrape the content from this URL and return all links and metadata too,distractor,Firecrawl (testing),full scrape with metadata implies Firecrawl
+jira_cloud,dev,What are my open Jira tickets assigned to me?,direct,Jira Cloud (testing),
+jira_cloud,dev,Show me the tasks I'm currently responsible for in our project tracker,indirect,Jira Cloud (testing),
+jira_cloud,dev,Show me the cards on my Trello board,distractor,Trello (testing),both kanban/project tools — query says Trello
+microsoft_teams,messaging,Send a message to my team on Teams saying the deploy is complete,direct,Microsoft Teams (testing),
+microsoft_teams,messaging,Let everyone in my workspace know that the release just went out,indirect,Microsoft Teams (testing),
+microsoft_teams,messaging,Post a message in the #general Slack channel saying the deploy is done,distractor,Slack (testing),both messaging — query says Slack channel
+notion,knowledge,Search my Notion workspace for meeting notes,direct,Notion (testing),
+notion,knowledge,Find notes from our last team meeting in our documentation tool,indirect,Notion (testing),
+notion,knowledge,Find pages in Confluence about last quarter's planning,distractor,Confluence Cloud (testing),both wiki tools — query says Confluence
+outlook,email,Check my Outlook inbox for emails from this week,direct,Outlook (testing),
+outlook,email,I need to see the emails I received in the past few days,indirect,Outlook (testing),
+outlook,email,Show me my most recent unread emails in Gmail,distractor,Gmail (testing),both email — query says Gmail
+salesforce,crm,Look up recent opportunities in Salesforce,direct,Salesforce (testing),
+salesforce,crm,What sales deals are currently in our pipeline?,indirect,Salesforce (testing),
+salesforce,crm,Show me the latest contacts added in our CRM,distractor,HubSpot (testing),both CRM — query says CRM generically; contacts maps to HubSpot
+sharepoint_online,storage,Find documents on our SharePoint site about company policies,direct,SharePoint Online (testing),
+sharepoint_online,storage,I need to find our HR policy documents on the company intranet,indirect,SharePoint Online (testing),intranet = SharePoint not generic Drive
+sharepoint_online,storage,Find documents in my Google Drive that were recently modified,distractor,Google Drive (testing),company intranet vs personal Drive
+slack,messaging,Post a message in the #general Slack channel saying hello,direct,Slack (testing),
+slack,messaging,Send a quick note to everyone in our main chat channel,indirect,Slack (testing),
+slack,messaging,Send a message to my team on Teams saying the deploy is complete,distractor,Microsoft Teams (testing),both messaging — query says Teams
+tavily,search,Do a research search on recent trends in AI-powered observability,direct,Tavily (testing),
+tavily,search,I need a comprehensive research summary on the latest developments in LLM-based monitoring,indirect,Tavily (testing),depth of synthesis implies Tavily
+tavily,search,Search the web for the latest Elasticsearch release notes,distractor,Brave Search (testing),quick lookup vs deep research
+trello,dev,Show me the cards on my Trello board,direct,Trello (testing),
+trello,dev,What tasks are currently on my Kanban board?,indirect,Trello (testing),
+trello,dev,What are my open Jira tickets assigned to me?,distractor,Jira Cloud (testing),kanban cards vs issue tracker
+zoom,calendar,What Zoom meetings do I have coming up?,direct,Zoom (testing),
+zoom,calendar,What video calls do I have scheduled for today?,indirect,Zoom (testing),
+zoom,calendar,What meetings do I have scheduled this week?,distractor,Google Calendar (testing),Zoom-specific list vs full calendar
+multi,cross-service,Consolidate all information about the escalation on the UI issue yesterday,direct,Slack (testing)|Gmail (testing)|Jira Cloud (testing)|Microsoft Teams (testing),Cross-service incident research — messaging + email + issue tracker
+multi,cross-service,Give me a full picture of where we stand on the Q3 launch across all our tools,direct,Jira Cloud (testing)|Confluence Cloud (testing)|Slack (testing)|Notion (testing),Project status spanning tracker + docs + comms
+multi,cross-service,Find everything we have on the Acme Corp customer complaint — emails tickets and messages,direct,Salesforce (testing)|Gmail (testing)|Slack (testing)|Jira Cloud (testing),Customer issue research across CRM + email + comms + tracker
+multi,cross-service,Help me prepare for my 3pm meeting — find the agenda any related docs and recent messages about it,direct,Google Calendar (testing)|Google Drive (testing)|Slack (testing)|Notion (testing),Meeting prep spanning calendar + docs + comms
+multi,cross-service,What is the status of last night's production deployment — check the code tickets and team messages,direct,GitHub (testing)|Jira Cloud (testing)|Slack (testing),Deploy status spanning code + tracker + comms
+multi,cross-service,Summarize all recent discussions about the API redesign across our communication channels,indirect,Slack (testing)|Microsoft Teams (testing)|Gmail (testing),Cross-channel comms research without naming specific tools
+multi,cross-service,Find all onboarding materials and recent communications about the new engineer joining next week,indirect,Confluence Cloud (testing)|Gmail (testing)|Slack (testing)|Google Drive (testing),Onboarding prep spanning docs + email + comms + files
+multi,cross-service,Give me everything we have on the Elastic deal — emails CRM records and meeting notes,direct,Salesforce (testing)|Gmail (testing)|Google Calendar (testing)|HubSpot (testing),Sales deal research spanning CRM + email + calendar
